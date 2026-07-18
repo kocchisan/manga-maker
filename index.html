@@ -165,7 +165,7 @@
       repeating-linear-gradient(45deg,#1a1420,#1a1420 10px,#20182a 10px,#20182a 20px);
   }
   .speech-bubble{
-    position:absolute;max-width:58%;max-height:82%;min-width:56px;min-height:56px;
+    position:absolute;max-width:64%;max-height:88%;min-width:56px;min-height:56px;
     background:#fff;color:#111;border-radius:50%/44%;
     padding:12px 10px;display:flex;align-items:center;justify-content:center;
     writing-mode:vertical-rl;text-orientation:mixed;
@@ -706,15 +706,18 @@ ${profile}
   }
 
   /* ---------- 画像として保存（強弱つきコマ割り＋楕円吹き出し・縦書き、画像は切り取らない） ---------- */
+  // 楕円の内側に文字がきれいに収まる実効範囲（角が円弧の外に出ないための係数）。
+  // bubbleBoxSize（寸法の見積もり）と drawSpeechBubble（実際の描画）で必ず同じ値を使うこと。
+  const BUBBLE_WF = 0.78, BUBBLE_HF = 0.80;
+
   // 吹き出しの寸法をセリフの文字数から見積もる。枠に収まらない場合は文字を縮小してでも全文を収める。
   function bubbleBoxSize(text, maxW, maxH){
     const len = Math.max(1, text.length);
-    const padX = 20, padY = 20;
     let fontSize = 13;
     while(fontSize >= 8){
       const lineHeight = fontSize+4, colWidth = fontSize+4;
-      const maxRowsAllowed = Math.max(1, Math.floor((maxH-padY)/lineHeight));
-      const maxColsAllowed = Math.max(1, Math.floor((maxW-padX)/colWidth));
+      const maxRowsAllowed = Math.max(1, Math.floor((maxH*BUBBLE_HF)/lineHeight));
+      const maxColsAllowed = Math.max(1, Math.floor((maxW*BUBBLE_WF)/colWidth));
       const fits = maxRowsAllowed*maxColsAllowed >= len;
       if(fits || fontSize === 8){
         let rowsPerCol = Math.max(1, Math.min(maxRowsAllowed, Math.round(Math.sqrt(len*1.15))));
@@ -723,9 +726,11 @@ ${profile}
           rowsPerCol++;
           cols = Math.min(maxColsAllowed, Math.ceil(len/rowsPerCol));
         }
-        const w = Math.min(maxW, cols*colWidth + padX);
-        const h = Math.min(maxH, rowsPerCol*lineHeight + padY);
-        return {w: Math.max(w, colWidth+padX), h: Math.max(h, lineHeight+padY), fontSize};
+        // 描画時に w*BUBBLE_WF / h*BUBBLE_HF として使う内側サイズを、
+        // ちょうど必要な cols*colWidth / rowsPerCol*lineHeight に一致させる
+        const w = Math.min(maxW, (cols*colWidth) / BUBBLE_WF);
+        const h = Math.min(maxH, (rowsPerCol*lineHeight) / BUBBLE_HF);
+        return {w: Math.max(w, colWidth/BUBBLE_WF), h: Math.max(h, lineHeight/BUBBLE_HF), fontSize};
       }
       fontSize -= 1;
     }
@@ -772,7 +777,8 @@ ${profile}
     ctx.beginPath();
     ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2);
     ctx.clip();
-    drawVerticalText(ctx, text, x+w*0.1, y+h*0.08, w*0.8, h*0.84, fontSize);
+    const iw = w*BUBBLE_WF, ih = h*BUBBLE_HF;
+    drawVerticalText(ctx, text, x+(w-iw)/2, y+(h-ih)/2, iw, ih, fontSize);
     ctx.restore();
   }
 
@@ -844,7 +850,7 @@ ${profile}
         }
         if(c.p.dialogue){
           const pos = c.p.bubblePosition || "br";
-          const {w:bw, h:bh, fontSize} = bubbleBoxSize(c.p.dialogue, c.cellW*0.58, c.cellH*0.82);
+          const {w:bw, h:bh, fontSize} = bubbleBoxSize(c.p.dialogue, c.cellW*0.66, c.cellH*0.9);
           const bx = pos.includes("l") ? c.x+8 : c.x+c.cellW-bw-8;
           const by = pos.includes("t") ? y+8 : y+c.cellH-bh-8;
           drawSpeechBubble(ctx, bx, by, bw, bh, c.p.dialogue, fontSize);

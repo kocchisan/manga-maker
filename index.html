@@ -709,6 +709,7 @@ ${profile}
   // 楕円の内側に文字がきれいに収まる実効範囲（角が円弧の外に出ないための係数）。
   // bubbleBoxSize（寸法の見積もり）と drawSpeechBubble（実際の描画）で必ず同じ値を使うこと。
   const BUBBLE_WF = 0.78, BUBBLE_HF = 0.80;
+  const BUBBLE_TARGET_ASPECT = 1.6; // 高さ÷幅の目安（丸すぎず、細長すぎない自然な吹き出し比率）
 
   // 吹き出しの寸法をセリフの文字数から見積もる。枠に収まらない場合は文字を縮小してでも全文を収める。
   function bubbleBoxSize(text, maxW, maxH){
@@ -720,8 +721,8 @@ ${profile}
       const maxColsAllowed = Math.max(1, Math.floor((maxW*BUBBLE_WF)/colWidth));
       const fits = maxRowsAllowed*maxColsAllowed >= len;
       if(fits || fontSize === 8){
-        // 画面表示（CSSの縦書き）と同じく、高さを目一杯使って列数を最小限にする（縦長の自然な吹き出し形）
-        let cols = Math.max(1, Math.min(maxColsAllowed, Math.ceil(len / maxRowsAllowed)));
+        // 縦横比が BUBBLE_TARGET_ASPECT に近づくよう列数を決める（文字量に関わらず自然なオーバル形になる）
+        let cols = Math.max(1, Math.min(maxColsAllowed, Math.round(Math.sqrt(len / BUBBLE_TARGET_ASPECT))));
         let rowsPerCol = Math.min(maxRowsAllowed, Math.ceil(len / cols));
         while(cols*rowsPerCol < len && cols < maxColsAllowed){
           cols++;

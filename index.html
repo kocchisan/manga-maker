@@ -720,11 +720,12 @@ ${profile}
       const maxColsAllowed = Math.max(1, Math.floor((maxW*BUBBLE_WF)/colWidth));
       const fits = maxRowsAllowed*maxColsAllowed >= len;
       if(fits || fontSize === 8){
-        let rowsPerCol = Math.max(1, Math.min(maxRowsAllowed, Math.round(Math.sqrt(len*1.15))));
-        let cols = Math.min(maxColsAllowed, Math.ceil(len/rowsPerCol));
-        while(cols*rowsPerCol < len && rowsPerCol < maxRowsAllowed){
-          rowsPerCol++;
-          cols = Math.min(maxColsAllowed, Math.ceil(len/rowsPerCol));
+        // 画面表示（CSSの縦書き）と同じく、高さを目一杯使って列数を最小限にする（縦長の自然な吹き出し形）
+        let cols = Math.max(1, Math.min(maxColsAllowed, Math.ceil(len / maxRowsAllowed)));
+        let rowsPerCol = Math.min(maxRowsAllowed, Math.ceil(len / cols));
+        while(cols*rowsPerCol < len && cols < maxColsAllowed){
+          cols++;
+          rowsPerCol = Math.min(maxRowsAllowed, Math.ceil(len/cols));
         }
         // 描画時に w*BUBBLE_WF / h*BUBBLE_HF として使う内側サイズを、
         // ちょうど必要な cols*colWidth / rowsPerCol*lineHeight に一致させる

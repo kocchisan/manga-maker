@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>マンガメーカー</title>
+<style>
+  :root{
+    --bg:#141018;
+    --panel:#211c29;
+    --panel2:#2a2333;
+    --accent:#ff5da0;
+    --accent2:#5db8ff;
+    --ink:#f5f1fa;
+    --sub:#a89bb8;
+    --line:#3a3247;
+    --danger:#ff6b6b;
+    --ok:#4dd28c;
+    --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:linear-gradient(160deg,#161020,#1c1428 60%,#120e18);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Yu Gothic",system-ui,-apple-system,sans-serif;
+    min-height:100vh;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .app{max-width:520px;margin:0 auto;padding:16px 14px 80px;}
+  header.top{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:6px 2px 18px;
+  }
+  header.top h1{
+    font-size:20px;margin:0;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    letter-spacing:.5px;
+  }
+  .gear{
+    width:36px;height:36px;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel);color:var(--sub);display:flex;align-items:center;justify-content:center;
+    font-size:18px;
+  }
+  .stepper{
+    display:flex;gap:6px;margin-bottom:18px;
+  }
+  .stepper .dot{
+    flex:1;height:5px;border-radius:3px;background:var(--line);
+  }
+  .stepper .dot.active{background:linear-gradient(90deg,var(--accent),var(--accent2));}
+  .stepper .dot.done{background:var(--ok);}
+
+  section.card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:16px;
+  }
+  section.card h2{
+    font-size:15px;margin:0 0 4px;color:var(--ink);
+    display:flex;align-items:center;gap:8px;
+  }
+  section.card h2 .num{
+    width:22px;height:22px;border-radius:50%;
+    background:var(--accent);color:#1a0f16;font-size:12px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .hint{font-size:12.5px;color:var(--sub);margin:0 0 12px;line-height:1.6;}
+
+  label.field{display:block;font-size:12.5px;color:var(--sub);margin:10px 0 6px;}
+  input[type=text],input[type=password],textarea,select{
+    width:100%;padding:11px 12px;border-radius:10px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--ink);
+    font-size:15px;font-family:inherit;resize:vertical;
+  }
+  textarea{min-height:70px;line-height:1.5;}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--accent2);}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:12px 16px;border-radius:12px;border:none;
+    font-size:14.5px;font-weight:600;cursor:pointer;width:100%;
+    background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    -webkit-tap-highlight-color:transparent;
+  }
+  .btn.primary{
+    background:linear-gradient(90deg,var(--accent),#ff8fc0);color:#22091a;border:none;
+  }
+  .btn.accent2{background:linear-gradient(90deg,var(--accent2),#8fd6ff);color:#071a26;border:none;}
+  .btn.ghost{background:transparent;}
+  .btn.danger{color:var(--danger);border-color:rgba(255,107,107,.4);background:transparent;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn small{font-weight:400;opacity:.8;}
+  .row{display:flex;gap:8px;}
+  .row .btn{flex:1;}
+
+  .photo-box{
+    width:100%;aspect-ratio:1/1;border-radius:12px;
+    background:var(--panel2);border:1.5px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;position:relative;color:var(--sub);font-size:13px;text-align:center;
+  }
+  .photo-box img{width:100%;height:100%;object-fit:cover;}
+  .photo-box.small{aspect-ratio:auto;height:100px;}
+
+  .char-card{
+    background:var(--panel2);border:1px solid var(--line);border-radius:14px;
+    padding:12px;margin-bottom:12px;
+  }
+  .char-card .top-row{display:flex;gap:10px;}
+  .char-card .thumbs{display:flex;gap:8px;width:150px;flex-shrink:0;}
+  .char-card .thumb{width:70px;height:70px;border-radius:10px;overflow:hidden;background:var(--panel);
+    display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--sub);position:relative;}
+  .char-card .thumb img{width:100%;height:100%;object-fit:cover;}
+  .char-card .thumb .lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);
+    font-size:9px;text-align:center;padding:1px 0;}
+  .char-card .fields{flex:1;min-width:0;}
+  .char-card input[type=text]{padding:8px 10px;font-size:13.5px;margin-bottom:6px;}
+  .char-card textarea{font-size:13px;min-height:54px;padding:8px 10px;}
+  .char-card .actions{display:flex;gap:6px;margin-top:8px;}
+  .char-card .actions .btn{padding:8px 10px;font-size:12.5px;}
+  .char-card .status{font-size:11.5px;margin-top:6px;color:var(--sub);min-height:14px;}
+  .char-card .status.err{color:var(--danger);}
+  .char-card .status.ok{color:var(--ok);}
+
+  .spinner{
+    width:14px;height:14px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.3);border-top-color:#fff;
+    animation:spin .7s linear infinite;display:inline-block;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .chip-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{
+    padding:8px 14px;border-radius:20px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--sub);font-size:13px;cursor:pointer;
+  }
+  .chip.active{background:var(--accent);color:#22091a;border-color:var(--accent);font-weight:700;}
+
+  .progress-log{
+    font-size:12.5px;color:var(--sub);line-height:2;max-height:160px;overflow-y:auto;
+    background:var(--panel2);border-radius:10px;padding:10px 12px;margin-top:10px;
+  }
+  .progress-log .line{display:flex;align-items:center;gap:6px;}
+  .progress-log .line.ok{color:var(--ok);}
+  .progress-log .line.err{color:var(--danger);}
+
+  #mangaPage{
+    background:#0e0b13;border-radius:14px;padding:10px;border:1px solid var(--line);
+  }
+  .panel{
+    position:relative;border-radius:10px;overflow:hidden;margin-bottom:10px;
+    background:#000;border:2px solid #1a1420;
+  }
+  .panel img{width:100%;display:block;}
+  .panel .ph{
+    width:100%;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;
+    color:var(--sub);font-size:13px;background:
+      repeating-linear-gradient(45deg,#1a1420,#1a1420 10px,#20182a 10px,#20182a 20px);
+  }
+  .bubble{
+    position:absolute;max-width:62%;background:#fff;color:#111;border-radius:16px;
+    padding:8px 12px;font-size:13px;line-height:1.4;font-weight:600;
+    box-shadow:0 2px 8px rgba(0,0,0,.4);
+  }
+  .bubble:after{
+    content:"";position:absolute;width:0;height:0;border:9px solid transparent;
+  }
+  .bubble.tl{top:10px;left:10px;} .bubble.tl:after{bottom:-16px;left:16px;border-top-color:#fff;}
+  .bubble.tr{top:10px;right:10px;} .bubble.tr:after{bottom:-16px;right:16px;border-top-color:#fff;}
+  .bubble.bl{bottom:10px;left:10px;} .bubble.bl:after{top:-16px;left:16px;border-bottom-color:#fff;}
+  .bubble.br{bottom:10px;right:10px;} .bubble.br:after{top:-16px;right:16px;border-bottom-color:#fff;}
+  .narration{
+    background:rgba(20,16,26,.88);color:#f5f1fa;font-size:11.5px;
+    padding:5px 10px;position:absolute;top:8px;left:8px;border-left:3px solid var(--accent2);
+    max-width:70%;line-height:1.4;
+  }
+  .panel-caption{font-size:11px;color:var(--sub);text-align:center;padding-top:4px;}
+
+  footer.note{font-size:11px;color:var(--sub);text-align:center;margin-top:20px;line-height:1.7;}
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;
+    align-items:flex-end;justify-content:center;z-index:50;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal{
+    background:var(--panel);border-radius:18px 18px 0 0;padding:20px 18px 26px;
+    width:100%;max-width:520px;border:1px solid var(--line);border-bottom:none;
+  }
+  .modal h3{margin:0 0 10px;font-size:16px;}
+  .key-eye{font-size:11px;color:var(--sub);margin-top:6px;}
+  a.link{color:var(--accent2);text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <h1>📖 マンガメーカー</h1>
+    <button class="gear" id="settingsBtn">⚙️</button>
+  </header>
+
+  <div class="stepper" id="stepper"></div>
+
+  <!-- STEP 1: キャラ作成 -->
+  <section class="card" id="stepChar">
+    <h2><span class="num">1</span>キャラクターを作る</h2>
+    <p class="hint">相手の写真を撮影またはアップロードして、マンガ風キャラクターに変換します。複数人追加できます。</p>
+    <div id="charList"></div>
+    <button class="btn ghost" id="addCharBtn">＋ キャラクターを追加</button>
+  </section>
+
+  <!-- STEP 2: プロフィール & シナリオ設定 -->
+  <section class="card" id="stepStory">
+    <h2><span class="num">2</span>マンガの設定</h2>
+    <p class="hint">プロフィールやエピソードを入力すると、AIがマンガのシナリオ（セリフ・コマ割り）を作ります。</p>
+    <label class="field">マンガのお題・伝えたい内容</label>
+    <textarea id="profileInput" placeholder="例）田中さんは仕事熱心で優しい。趣味は釣り。最近、部下から相談されて一緒に問題を解決した話をマンガにしたい。"></textarea>
+    <label class="field">コマ数</label>
+    <div class="chip-row" id="panelCountChips">
+      <div class="chip" data-v="4">4コマ</div>
+      <div class="chip active" data-v="6">6コマ</div>
+      <div class="chip" data-v="8">8コマ</div>
+    </div>
+    <label class="field">絵のタッチ</label>
+    <div class="chip-row" id="styleChips">
+      <div class="chip active" data-v="少年漫画風の元気で躍動感あるタッチ">少年漫画風</div>
+      <div class="chip" data-v="少女漫画風の繊細で柔らかいタッチ">少女漫画風</div>
+      <div class="chip" data-v="ほのぼのとした4コマギャグ漫画風のゆるいタッチ">ゆるふわ4コマ</div>
+    </div>
+  </section>
+
+  <!-- STEP 3: 生成 -->
+  <section class="card" id="stepGenerate">
+    <h2><span class="num">3</span>マンガを作成</h2>
+    <p class="hint">シナリオ生成 → コマ絵生成 → 合成の順に自動で行います（コマ数が多いほど時間がかかります）。</p>
+    <button class="btn primary" id="generateBtn">✨ マンガを生成する</button>
+    <div class="progress-log" id="progressLog" style="display:none;"></div>
+  </section>
+
+  <!-- STEP 4: 結果 -->
+  <section class="card" id="stepResult" style="display:none;">
+    <h2><span class="num">4</span>完成！</h2>
+    <div id="mangaTitle" style="font-weight:700;font-size:16px;margin-bottom:10px;"></div>
+    <div id="mangaPage"></div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn accent2" id="downloadBtn">⬇️ 画像として保存</button>
+      <button class="btn ghost" id="regenBtn">🔄 シナリオを作り直す</button>
+    </div>
+  </section>
+
+  <footer class="note">
+    このアプリは Google Gemini API を使用します。APIキーはお使いの端末のブラウザ内にのみ保存され、外部サーバーには送信されません。<br>
+    写真・生成画像も保存/送信されず、閲覧を終了すると消えます（APIキーのみ端末に保持）。
+  </footer>
+</div>
+
+<!-- 設定モーダル -->
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal">
+    <h3>⚙️ APIキー設定</h3>
+    <p class="hint">Google AI Studio で取得した Gemini API キーを入力してください。</p>
+    <input type="password" id="apiKeyInput" placeholder="AIza...">
+    <div class="key-eye">
+      <a class="link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">APIキーを取得する（Google AI Studio）</a>
+    </div>
+    <div class="row" style="margin-top:14px;">
+      <button class="btn ghost" id="closeSettings">閉じる</button>
+      <button class="btn primary" id="saveSettings">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- 状態 ---------- */
+  const state = {
+    apiKey: localStorage.getItem("mangaMakerApiKey") || "",
+    characters: [], // {id, name, profile, photo:{mime,data}, mangaAvatar:{mime,data}|null, status}
+    panelCount: 6,
+    style: "少年漫画風の元気で躍動感あるタッチ",
+    scenario: null,
+    panelImages: [] // dataURL per panel
+  };
+  let charSeq = 0;
+
+  const IMAGE_MODEL = "gemini-2.5-flash-image";
+  const TEXT_MODEL = "gemini-2.5-flash";
+  const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+
+  /* ---------- ユーティリティ ---------- */
+  function fileToBase64(file){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result; // data:image/xxx;base64,....
+        const mime = result.substring(5, result.indexOf(";"));
+        const data = result.substring(result.indexOf(",")+1);
+        resolve({mime, data});
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function dataUrlOf(obj){ return `data:${obj.mime};base64,${obj.data}`; }
+
+  async function callGeminiImage(promptText, referenceImages){
+    // referenceImages: array of {mime,data}
+    if(!state.apiKey) throw new Error("APIキーが設定されていません");
+    const parts = [{text: promptText}];
+    (referenceImages||[]).forEach(img=>{
+      parts.push({inlineData:{mimeType:img.mime, data:img.data}});
+    });
+    const res = await fetch(`${API_BASE}${IMAGE_MODEL}:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({contents:[{parts}]})
+    });
+    const json = await res.json();
+    if(!res.ok){
+      throw new Error(json?.error?.message || `画像生成に失敗しました (${res.status})`);
+    }
+    const cand = json.candidates && json.candidates[0];
+    const imgPart = cand?.content?.parts?.find(p=>p.inlineData);
+    if(!imgPart) throw new Error("画像が生成されませんでした（プロンプトが拒否された可能性があります）");
+    return {mime: imgPart.inlineData.mimeType, data: imgPart.inlineData.data};
+  }
+
+  async function callGeminiText(promptText, schema){
+    if(!state.apiKey) throw new Error("APIキーが設定されていません");
+    const body = {
+      contents:[{parts:[{text: promptText}]}],
+      generationConfig:{
+        responseMimeType:"application/json",
+        responseSchema: schema
+      }
+    };
+    const res = await fetch(`${API_BASE}${TEXT_MODEL}:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(body)
+    });
+    const json = await res.json();
+    if(!res.ok){
+      throw new Error(json?.error?.message || `シナリオ生成に失敗しました (${res.status})`);
+    }
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+    if(!text) throw new Error("シナリオの生成結果が空でした");
+    try{ return JSON.parse(text); }
+    catch(e){ throw new Error("シナリオのJSON解析に失敗しました"); }
+  }
+
+  /* ---------- 設定モーダル ---------- */
+  const settingsModal = document.getElementById("settingsModal");
+  document.getElementById("settingsBtn").onclick = () => {
+    document.getElementById("apiKeyInput").value = state.apiKey;
+    settingsModal.classList.add("show");
+  };
+  document.getElementById("closeSettings").onclick = () => settingsModal.classList.remove("show");
+  document.getElementById("saveSettings").onclick = () => {
+    state.apiKey = document.getElementById("apiKeyInput").value.trim();
+    localStorage.setItem("mangaMakerApiKey", state.apiKey);
+    settingsModal.classList.remove("show");
+  };
+  if(!state.apiKey){
+    setTimeout(()=>{ document.getElementById("settingsBtn").click(); }, 300);
+  }
+
+  /* ---------- ステッパー ---------- */
+  function renderStepper(){
+    const el = document.getElementById("stepper");
+    const steps = 4;
+    const doneChars = state.characters.some(c=>c.mangaAvatar);
+    const doneStory = !!document.getElementById("profileInput").value.trim();
+    const doneGen = !!state.scenario;
+    const states = [doneChars, doneStory, doneGen, doneGen];
+    el.innerHTML = "";
+    for(let i=0;i<steps;i++){
+      const d = document.createElement("div");
+      d.className = "dot" + (states[i] ? " done" : "");
+      el.appendChild(d);
+    }
+  }
+
+  /* ---------- キャラクターカード ---------- */
+  function addCharacter(){
+    const id = "c" + (++charSeq);
+    state.characters.push({id, name:"", profile:"", photo:null, mangaAvatar:null, status:""});
+    renderCharList();
+  }
+
+  function renderCharList(){
+    const list = document.getElementById("charList");
+    list.innerHTML = "";
+    state.characters.forEach(ch=>{
+      const card = document.createElement("div");
+      card.className = "char-card";
+      card.innerHTML = `
+        <div class="top-row">
+          <div class="thumbs">
+            <div class="thumb photo-slot">
+              ${ch.photo ? `<img src="${dataUrlOf(ch.photo)}">` : "写真"}
+              <div class="lbl">元写真</div>
+            </div>
+            <div class="thumb avatar-slot">
+              ${ch.mangaAvatar ? `<img src="${dataUrlOf(ch.mangaAvatar)}">` : "キャラ"}
+              <div class="lbl">マンガ化</div>
+            </div>
+          </div>
+          <div class="fields">
+            <input type="text" class="name-input" placeholder="名前（例：田中さん）" value="${ch.name.replace(/"/g,'&quot;')}">
+            <textarea class="profile-input" placeholder="性格・特徴・見た目など（例：40代男性、優しい笑顔、丸メガネ、いつも紺のジャケット）">${ch.profile}</textarea>
+          </div>
+        </div>
+        <input type="file" accept="image/*" capture="environment" class="file-input" style="display:none;">
+        <div class="actions">
+          <button class="btn ghost btn-photo" style="flex:1;">📷 写真を選ぶ</button>
+          <button class="btn primary btn-convert" style="flex:1;" ${ch.photo?"":"disabled"}>🎨 キャラ変換</button>
+          <button class="btn danger btn-remove" style="flex:0 0 auto;padding:8px 12px;">✕</button>
+        </div>
+        <div class="status ${ch.status.startsWith('❌')?'err':(ch.mangaAvatar?'ok':'')}">${ch.status}</div>
+      `;
+      const fileInput = card.querySelector(".file-input");
+      card.querySelector(".btn-photo").onclick = () => fileInput.click();
+      fileInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        ch.photo = await fileToBase64(file);
+        ch.mangaAvatar = null;
+        renderCharList();
+      };
+      card.querySelector(".name-input").oninput = (e)=>{ ch.name = e.target.value; };
+      card.querySelector(".profile-input").oninput = (e)=>{ ch.profile = e.target.value; };
+      card.querySelector(".btn-remove").onclick = () => {
+        state.characters = state.characters.filter(c=>c.id!==ch.id);
+        renderCharList();
+      };
+      card.querySelector(".btn-convert").onclick = () => convertCharacter(ch);
+      list.appendChild(card);
+    });
+    renderStepper();
+  }
+
+  async function convertCharacter(ch){
+    if(!ch.photo){ return; }
+    ch.status = "変換中...";
+    renderCharList();
+    try{
+      const prompt = `この写真の人物を、日本のマンガ・アニメ風の1人のキャラクターイラストに変換してください。
+条件:
+- 顔立ちや髪型など特徴はできるだけ保ちつつ、線画+セル塗りのマンガ風に変換する
+- バストアップ〜全身が分かる構図、背景は無地の単色（白系）
+- 実写感を消し、はっきりしたマンガ・アニメの画風にする
+- テキストや文字、吹き出しは一切入れない
+- 1人のキャラクターのみを描く`;
+      const result = await callGeminiImage(prompt, [ch.photo]);
+      ch.mangaAvatar = result;
+      ch.status = "✅ 変換完了";
+    }catch(err){
+      ch.status = "❌ " + err.message;
+    }
+    renderCharList();
+  }
+
+  document.getElementById("addCharBtn").onclick = addCharacter;
+  addCharacter(); // 最初に1枠出しておく
+
+  /* ---------- ストーリー設定 ---------- */
+  document.querySelectorAll("#panelCountChips .chip").forEach(chip=>{
+    chip.onclick = () => {
+      document.querySelectorAll("#panelCountChips .chip").forEach(c=>c.classList.remove("active"));
+      chip.classList.add("active");
+      state.panelCount = parseInt(chip.dataset.v, 10);
+    };
+  });
+  document.querySelectorAll("#styleChips .chip").forEach(chip=>{
+    chip.onclick = () => {
+      document.querySelectorAll("#styleChips .chip").forEach(c=>c.classList.remove("active"));
+      chip.classList.add("active");
+      state.style = chip.dataset.v;
+    };
+  });
+  document.getElementById("profileInput").addEventListener("input", renderStepper);
+
+  /* ---------- 進捗ログ ---------- */
+  const progressLog = document.getElementById("progressLog");
+  function logLine(text, cls){
+    progressLog.style.display = "block";
+    const line = document.createElement("div");
+    line.className = "line" + (cls?(" "+cls):"");
+    line.innerHTML = text;
+    progressLog.appendChild(line);
+    progressLog.scrollTop = progressLog.scrollHeight;
+    return line;
+  }
+
+  /* ---------- 生成メイン処理 ---------- */
+  const generateBtn = document.getElementById("generateBtn");
+  generateBtn.onclick = runGeneration;
+
+  async function runGeneration(){
+    const readyChars = state.characters.filter(c=>c.mangaAvatar);
+    const profile = document.getElementById("profileInput").value.trim();
+
+    if(!state.apiKey){
+      alert("先に⚙️からAPIキーを設定してください");
+      return;
+    }
+    if(readyChars.length === 0){
+      alert("マンガ変換が完了したキャラクターを1人以上作成してください");
+      return;
+    }
+    if(!profile){
+      alert("マンガのお題・プロフィールを入力してください");
+      return;
+    }
+
+    generateBtn.disabled = true;
+    progressLog.innerHTML = "";
+    progressLog.style.display = "block";
+
+    try{
+      // 1) シナリオ生成
+      const loadingLine = logLine('<span class="spinner"></span> シナリオを作成中...');
+      const charListText = readyChars.map(c=>`- ${c.name || "名前未設定"}: ${c.profile || "特徴未設定"}`).join("\n");
+      const schema = {
+        type:"object",
+        properties:{
+          title:{type:"string"},
+          panels:{
+            type:"array",
+            items:{
+              type:"object",
+              properties:{
+                characterName:{type:"string"},
+                sceneDescription:{type:"string"},
+                dialogue:{type:"string"},
+                narration:{type:"string"},
+                bubblePosition:{type:"string", enum:["tl","tr","bl","br"]}
+              },
+              required:["characterName","sceneDescription","dialogue","bubblePosition"]
+            }
+          }
+        },
+        required:["title","panels"]
+      };
+      const prompt = `以下の登場人物とお題をもとに、${state.panelCount}コマの日本のマンガのシナリオを考えてください。
+
+【登場人物】
+${charListText}
+
+【お題・エピソード】
+${profile}
+
+【指示】
+- ちょうど${state.panelCount}コマ分の配列を panels に入れる
+- 各コマに、登場人物のうち誰がメインで映るか(characterName、登場人物の名前と完全一致させる)
+- sceneDescription には、そのコマで描くべき情景・構図・表情・動作を、絵師に伝える指示として具体的に書く（日本語）
+- dialogue には、そのコマでのセリフを1〜2文で書く（ナレーションのみのコマは空文字でよい）
+- narration には状況説明のナレーションがあれば短く書く（不要なら空文字）
+- bubblePosition は tl/tr/bl/br のいずれかで、セリフ吹き出しを置く位置をコマごとにバランスよく散らす
+- 起承転結を意識し、最後のコマは温かい締めくくりにする`;
+      const scenario = await callGeminiText(prompt, schema);
+      state.scenario = scenario;
+      loadingLine.className = "line ok";
+      loadingLine.innerHTML = "✅ シナリオ完成: " + (scenario.title || "");
+
+      // 2) 各コマの絵を生成
+      state.panelImages = new Array(scenario.panels.length).fill(null);
+      for(let i=0;i<scenario.panels.length;i++){
+        const p = scenario.panels[i];
+        const line = logLine(`<span class="spinner"></span> ${i+1}コマ目を描画中...`);
+        try{
+          const targetChar = readyChars.find(c=> c.name && p.characterName && c.name.trim() === p.characterName.trim())
+                              || readyChars[i % readyChars.length];
+          const refs = targetChar && targetChar.mangaAvatar ? [targetChar.mangaAvatar] : [];
+          const panelPrompt = `添付の参照画像のキャラクターと同一の見た目を保ったまま、次のマンガの1コマを描いてください。
+
+画風: ${state.style}
+コマの情景: ${p.sceneDescription}
+
+条件:
+- マンガの1コマとして自然な構図（フキダシや文字は絶対に入れない。テキストは一切描かない）
+- キャラクターの顔・髪型・服装は参照画像から一貫させる
+- 横長〜正方形のコマとして構成する`;
+          const img = await callGeminiImage(panelPrompt, refs);
+          state.panelImages[i] = img;
+          line.className = "line ok";
+          line.innerHTML = `✅ ${i+1}コマ目 完了`;
+        }catch(err){
+          line.className = "line err";
+          line.innerHTML = `❌ ${i+1}コマ目 失敗: ${err.message}`;
+        }
+      }
+
+      renderMangaPage();
+      document.getElementById("stepResult").style.display = "block";
+      document.getElementById("stepResult").scrollIntoView({behavior:"smooth"});
+      renderStepper();
+    }catch(err){
+      logLine("❌ " + err.message, "err");
+    }finally{
+      generateBtn.disabled = false;
+    }
+  }
+
+  document.getElementById("regenBtn").onclick = runGeneration;
+
+  /* ---------- マンガページ描画 ---------- */
+  function renderMangaPage(){
+    document.getElementById("mangaTitle").textContent = state.scenario.title || "";
+    const page = document.getElementById("mangaPage");
+    page.innerHTML = "";
+    state.scenario.panels.forEach((p, i)=>{
+      const panel = document.createElement("div");
+      panel.className = "panel";
+      const img = state.panelImages[i];
+      panel.innerHTML = img
+        ? `<img src="${dataUrlOf(img)}">`
+        : `<div class="ph">画像生成に失敗しました</div>`;
+      if(p.narration){
+        const nar = document.createElement("div");
+        nar.className = "narration";
+        nar.textContent = p.narration;
+        panel.appendChild(nar);
+      }
+      if(p.dialogue){
+        const bub = document.createElement("div");
+        bub.className = "bubble " + (p.bubblePosition || "br");
+        bub.textContent = p.dialogue;
+        panel.appendChild(bub);
+      }
+      page.appendChild(panel);
+      const cap = document.createElement("div");
+      cap.className = "panel-caption";
+      cap.textContent = `#${i+1} ${p.characterName || ""}`;
+      page.appendChild(cap);
+    });
+  }
+
+  /* ---------- 画像として保存 ---------- */
+  document.getElementById("downloadBtn").onclick = async () => {
+    const panels = state.scenario.panels;
+    const W = 720;
+    const GAP = 14;
+    const PAD = 14;
+    // 事前に各画像をロードしてサイズ確定
+    const loaded = await Promise.all(state.panelImages.map(img=>{
+      return new Promise(resolve=>{
+        if(!img){ resolve(null); return; }
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => resolve(null);
+        im.src = dataUrlOf(img);
+      });
+    }));
+    const innerW = W - PAD*2;
+    const heights = loaded.map(im => im ? Math.round(innerW * (im.height/im.width)) : Math.round(innerW*0.75));
+    const totalH = PAD*2 + heights.reduce((a,b)=>a+b+GAP,0) + 60;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = totalH;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#0e0b13";
+    ctx.fillRect(0,0,W,totalH);
+
+    ctx.fillStyle = "#f5f1fa";
+    ctx.font = "bold 24px sans-serif";
+    ctx.fillText(state.scenario.title || "", PAD, 40);
+
+    let y = 60;
+    for(let i=0;i<panels.length;i++){
+      const p = panels[i];
+      const im = loaded[i];
+      const h = heights[i];
+      ctx.fillStyle = "#000";
+      ctx.fillRect(PAD, y, innerW, h);
+      if(im){ ctx.drawImage(im, PAD, y, innerW, h); }
+      else{
+        ctx.fillStyle = "#a89bb8";
+        ctx.font = "14px sans-serif";
+        ctx.fillText("画像なし", PAD+10, y+h/2);
+      }
+      // ナレーション
+      if(p.narration){
+        ctx.font = "12px sans-serif";
+        const nw = Math.min(ctx.measureText(p.narration).width + 20, innerW*0.7);
+        ctx.fillStyle = "rgba(20,16,26,0.88)";
+        ctx.fillRect(PAD+8, y+8, nw, 22);
+        ctx.fillStyle = "#f5f1fa";
+        ctx.fillText(p.narration, PAD+16, y+24);
+      }
+      // 吹き出し
+      if(p.dialogue){
+        ctx.font = "bold 13px sans-serif";
+        const bw = Math.min(ctx.measureText(p.dialogue).width + 24, innerW*0.62);
+        const bh = 30;
+        let bx = PAD+8, by = y+8;
+        const pos = p.bubblePosition || "br";
+        if(pos.includes("r")) bx = PAD+innerW-bw-8;
+        if(pos.includes("b")) by = y+h-bh-8;
+        ctx.fillStyle = "#fff";
+        roundRect(ctx, bx, by, bw, bh, 12);
+        ctx.fill();
+        ctx.fillStyle = "#111";
+        ctx.fillText(p.dialogue, bx+12, by+bh/2+5);
+      }
+      y += h + GAP;
+    }
+
+    const link = document.createElement("a");
+    link.download = "manga.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+
+  function roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  renderStepper();
+})();
+</script>
+</body>
+</html>

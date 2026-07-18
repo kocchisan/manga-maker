@@ -156,19 +156,20 @@
   .panel{
     position:relative;border-radius:10px;overflow:hidden;min-width:0;
     background:#000;border:2px solid #1a1420;
+    display:flex;align-items:center;justify-content:center;
   }
-  .panel img{width:100%;display:block;}
+  .panel img{width:100%;height:100%;object-fit:contain;display:block;}
   .panel .ph{
     width:100%;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;
     color:var(--sub);font-size:13px;background:
       repeating-linear-gradient(45deg,#1a1420,#1a1420 10px,#20182a 10px,#20182a 20px);
   }
   .speech-bubble{
-    position:absolute;max-width:52%;max-height:80%;
-    background:#fff;color:#111;border-radius:50%/38%;
-    padding:12px 9px;display:flex;align-items:center;justify-content:center;
+    position:absolute;max-width:46%;max-height:112px;min-width:56px;
+    background:#fff;color:#111;border-radius:50%/44%;
+    padding:11px 9px;display:flex;align-items:center;justify-content:center;
     writing-mode:vertical-rl;text-orientation:mixed;
-    font-size:12.5px;font-weight:700;line-height:1.55;letter-spacing:.02em;
+    font-size:12.5px;font-weight:700;line-height:1.5;letter-spacing:.02em;
     box-shadow:0 2px 6px rgba(0,0,0,.35);overflow:hidden;
   }
   .speech-bubble.tl{top:8px;left:8px;}
@@ -637,7 +638,12 @@ ${profile}
     return rows;
   }
 
-  /* ---------- マンガページ描画 ---------- */
+  /* ---------- マンガページ描画 ----------
+     通常のマンガ本のページのように全体を収めるため、コマの縦横比に上限を設ける。
+     上限を超える画像は切り取らず、レターボックス（左右に黒帯）で縮小して収める。 */
+  const FULL_MAX_RATIO = 0.62; // 全幅コマの高さ上限（幅に対する比率）
+  const HALF_MAX_RATIO = 1.05; // ペアコマの高さ上限
+
   function renderMangaPage(){
     document.getElementById("mangaTitle").textContent = state.scenario.title || "";
     const page = document.getElementById("mangaPage");
@@ -654,9 +660,18 @@ ${profile}
         const panel = document.createElement("div");
         panel.className = "panel";
         const img = state.panelImages[index];
-        panel.innerHTML = img
-          ? `<img src="${dataUrlOf(img)}">`
-          : `<div class="ph">画像生成に失敗しました</div>`;
+        if(img){
+          const imgEl = document.createElement("img");
+          imgEl.src = dataUrlOf(img);
+          imgEl.onload = () => {
+            const naturalRatio = imgEl.naturalHeight / imgEl.naturalWidth;
+            const maxRatio = span === 12 ? FULL_MAX_RATIO : HALF_MAX_RATIO;
+            panel.style.aspectRatio = `1 / ${Math.min(naturalRatio, maxRatio)}`;
+          };
+          panel.appendChild(imgEl);
+        }else{
+          panel.innerHTML = `<div class="ph">画像生成に失敗しました</div>`;
+        }
 
         if(p.dialogue){
           const bub = document.createElement("div");
@@ -679,14 +694,21 @@ ${profile}
   // 吹き出しの寸法をセリフの文字数から見積もる（枠内に収める）
   function bubbleBoxSize(text, maxW, maxH){
     const fontSize = 13, lineHeight = fontSize+4, colWidth = fontSize+4;
-    const padX = 18, padY = 18;
-    const availH = Math.max(lineHeight, maxH - padY);
-    const maxCharsPerCol = Math.max(1, Math.floor(availH/lineHeight));
+    const padX = 20, padY = 20;
     const len = Math.max(1, text.length);
-    const cols = Math.max(1, Math.ceil(len/maxCharsPerCol));
-    const w = Math.min(maxW, cols*colWidth + padX);
-    const charsInCol = Math.min(maxCharsPerCol, len);
-    const h = Math.min(maxH, charsInCol*lineHeight + padY);
+    // 縦長になりすぎないよう、文字数から縦横バランスの取れた列数を決める
+    let rowsPerCol = Math.max(1, Math.round(Math.sqrt(len * 1.15)));
+    let cols = Math.ceil(len / rowsPerCol);
+    let w = cols*colWidth + padX;
+    let h = rowsPerCol*lineHeight + padY;
+    while(h > maxH && rowsPerCol > 1){
+      rowsPerCol--;
+      cols = Math.ceil(len / rowsPerCol);
+      w = cols*colWidth + padX;
+      h = rowsPerCol*lineHeight + padY;
+    }
+    w = Math.min(w, maxW);
+    h = Math.min(h, maxH);
     return {w: Math.max(w, colWidth+padX), h: Math.max(h, lineHeight+padY)};
   }
 
@@ -752,7 +774,8 @@ ${profile}
       });
     }));
 
-    // 画面表示と同じ「強弱つき」レイアウトをここでも計算する（画像は切り取らず、幅基準の等比で配置）
+    // 画面表示と同じ「強弱つき」レイアウトをここでも計算する。
+    // 縦長になりすぎる画像は切り取らず、上限の高さに収まるよう縮小してレターボックス（余白）で中央に置く。
     const rows = computeLayout(panels);
     let y = 60;
     const layoutRows = rows.map(row=>{
@@ -762,12 +785,16 @@ ${profile}
         const p = panels[cell.index];
         const im = loaded[cell.index];
         const cellW = availW * (cell.span/12);
-        const imgH = im ? cellW * (im.height/im.width) : cellW*0.7;
-        const c = {...cell, p, im, cellW, imgH, x};
+        const maxRatio = cell.span === 12 ? FULL_MAX_RATIO : HALF_MAX_RATIO;
+        const naturalRatio = im ? (im.height/im.width) : 0.7;
+        const cellH = cellW * Math.min(naturalRatio, maxRatio);
+        let drawW = cellW, drawH = cellW * naturalRatio;
+        if(drawH > cellH){ drawH = cellH; drawW = drawH / naturalRatio; }
+        const c = {...cell, p, im, cellW, cellH, drawW, drawH, x};
         x += cellW + GAP;
         return c;
       });
-      const rowH = Math.max(...cells.map(c=>c.imgH));
+      const rowH = Math.max(...cells.map(c=>c.cellH));
       const rowInfo = {cells, y, rowH};
       y += rowH + GAP;
       return rowInfo;
@@ -787,18 +814,20 @@ ${profile}
     layoutRows.forEach(({cells, y, rowH})=>{
       cells.forEach(c=>{
         ctx.fillStyle = "#000";
-        ctx.fillRect(c.x, y, c.cellW, rowH);
-        if(c.im){ ctx.drawImage(c.im, c.x, y, c.cellW, c.imgH); }
+        ctx.fillRect(c.x, y, c.cellW, c.cellH);
+        const dx = c.x + (c.cellW - c.drawW)/2;
+        const dy = y + (c.cellH - c.drawH)/2;
+        if(c.im){ ctx.drawImage(c.im, dx, dy, c.drawW, c.drawH); }
         else{
           ctx.fillStyle = "#a89bb8";
           ctx.font = "13px sans-serif";
-          ctx.fillText("画像なし", c.x+10, y+rowH/2);
+          ctx.fillText("画像なし", c.x+10, y+c.cellH/2);
         }
         if(c.p.dialogue){
           const pos = c.p.bubblePosition || "br";
-          const {w:bw, h:bh} = bubbleBoxSize(c.p.dialogue, c.cellW*0.52, c.imgH*0.8);
+          const {w:bw, h:bh} = bubbleBoxSize(c.p.dialogue, c.cellW*0.44, 112);
           const bx = pos.includes("l") ? c.x+8 : c.x+c.cellW-bw-8;
-          const by = pos.includes("t") ? y+8 : y+c.imgH-bh-8;
+          const by = pos.includes("t") ? y+8 : y+c.cellH-bh-8;
           drawSpeechBubble(ctx, bx, by, bw, bh, c.p.dialogue);
         }
       });

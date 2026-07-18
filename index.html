@@ -150,32 +150,31 @@
 
   #mangaPage{
     background:#0e0b13;border-radius:14px;padding:10px;border:1px solid var(--line);
-    display:grid;grid-template-columns:repeat(2,1fr);gap:10px;
+    display:grid;grid-template-columns:repeat(12,1fr);gap:10px;
   }
-  .panel-wrap{display:flex;flex-direction:column;}
-  .panel-wrap:last-child:nth-child(odd){grid-column:1 / -1;}
+  .panel-outer{display:flex;flex-direction:column;min-width:0;}
+  .panel-row{display:flex;gap:8px;}
+  .panel-row.rev{flex-direction:row-reverse;}
   .panel{
-    position:relative;border-radius:10px;overflow:hidden;flex:1;
-    background:#000;border:2px solid #1a1420;min-height:110px;
+    position:relative;border-radius:10px;overflow:hidden;flex:1 1 auto;min-width:0;
+    background:#000;border:2px solid #1a1420;
   }
+  .panel-outer.full .panel{aspect-ratio:16/8;}
+  .panel-outer.half .panel{aspect-ratio:3/4;}
   .panel img{width:100%;height:100%;object-fit:cover;display:block;}
   .panel .ph{
-    width:100%;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;
+    width:100%;height:100%;display:flex;align-items:center;justify-content:center;
     color:var(--sub);font-size:13px;background:
       repeating-linear-gradient(45deg,#1a1420,#1a1420 10px,#20182a 10px,#20182a 20px);
   }
-  .bubble{
-    position:absolute;max-width:62%;background:#fff;color:#111;border-radius:16px;
-    padding:8px 12px;font-size:13px;line-height:1.4;font-weight:600;
-    box-shadow:0 2px 8px rgba(0,0,0,.4);
+  .speech-bubble{
+    flex:0 0 auto;width:56px;max-width:32%;
+    background:#fff;color:#111;border-radius:50%/42%;
+    padding:12px 8px;display:flex;align-items:center;justify-content:center;
+    writing-mode:vertical-rl;text-orientation:mixed;
+    font-size:12.5px;font-weight:700;line-height:1.55;letter-spacing:.02em;
+    box-shadow:0 2px 6px rgba(0,0,0,.35);position:relative;overflow:hidden;
   }
-  .bubble:after{
-    content:"";position:absolute;width:0;height:0;border:9px solid transparent;
-  }
-  .bubble.tl{top:10px;left:10px;} .bubble.tl:after{bottom:-16px;left:16px;border-top-color:#fff;}
-  .bubble.tr{top:10px;right:10px;} .bubble.tr:after{bottom:-16px;right:16px;border-top-color:#fff;}
-  .bubble.bl{bottom:10px;left:10px;} .bubble.bl:after{top:-16px;left:16px;border-bottom-color:#fff;}
-  .bubble.br{bottom:10px;right:10px;} .bubble.br:after{top:-16px;right:16px;border-bottom-color:#fff;}
   .narration{
     background:rgba(20,16,26,.88);color:#f5f1fa;font-size:11.5px;
     padding:5px 10px;position:absolute;top:8px;left:8px;border-left:3px solid var(--accent2);
@@ -615,42 +614,86 @@ ${profile}
 
   document.getElementById("regenBtn").onclick = runGeneration;
 
+  /* ---------- コマ割りレイアウト計算 ----------
+     セリフ・情景描写・ナレーションの分量が多いコマほど「見せゴマ」として
+     大きく（全幅で）配置し、それ以外は2コマ組でリズムをつけて並べる。
+     先頭（つかみ）と最後（締め）のコマも全幅で強調する。 */
+  function computeLayout(panels){
+    const scores = panels.map(p =>
+      (p.sceneDescription||"").length + (p.dialogue||"").length*1.5 + (p.narration||"").length);
+    const avg = scores.reduce((a,b)=>a+b,0) / (scores.length || 1);
+    const isBig = scores.map((s,i)=> i===0 || i===panels.length-1 || s >= avg*1.25);
+    const rows = [];
+    let i = 0, toggle = true;
+    while(i < panels.length){
+      if(isBig[i]){
+        rows.push([{index:i, span:12}]);
+        i++;
+      }else{
+        const group = [i]; i++;
+        if(i < panels.length && !isBig[i]){ group.push(i); i++; }
+        if(group.length === 2){
+          const spanA = toggle?7:5, spanB = toggle?5:7;
+          toggle = !toggle;
+          rows.push([{index:group[0],span:spanA},{index:group[1],span:spanB}]);
+        }else{
+          rows.push([{index:group[0],span:12}]);
+        }
+      }
+    }
+    return rows;
+  }
+
   /* ---------- マンガページ描画 ---------- */
   function renderMangaPage(){
     document.getElementById("mangaTitle").textContent = state.scenario.title || "";
     const page = document.getElementById("mangaPage");
     page.innerHTML = "";
-    state.scenario.panels.forEach((p, i)=>{
-      const wrap = document.createElement("div");
-      wrap.className = "panel-wrap";
-      const panel = document.createElement("div");
-      panel.className = "panel";
-      const img = state.panelImages[i];
-      panel.innerHTML = img
-        ? `<img src="${dataUrlOf(img)}">`
-        : `<div class="ph">画像生成に失敗しました</div>`;
-      if(p.narration){
-        const nar = document.createElement("div");
-        nar.className = "narration";
-        nar.textContent = p.narration;
-        panel.appendChild(nar);
-      }
-      if(p.dialogue){
-        const bub = document.createElement("div");
-        bub.className = "bubble " + (p.bubblePosition || "br");
-        bub.textContent = p.dialogue;
-        panel.appendChild(bub);
-      }
-      wrap.appendChild(panel);
-      const cap = document.createElement("div");
-      cap.className = "panel-caption";
-      cap.textContent = `#${i+1} ${p.characterName || ""}`;
-      wrap.appendChild(cap);
-      page.appendChild(wrap);
+    const panels = state.scenario.panels;
+    const rows = computeLayout(panels);
+    rows.forEach(row=>{
+      row.forEach(({index, span}, cellPos)=>{
+        const p = panels[index];
+        const outer = document.createElement("div");
+        outer.className = "panel-outer " + (span===12 ? "full" : "half");
+        outer.style.gridColumn = `span ${span}`;
+
+        const prow = document.createElement("div");
+        const isLeft = (p.bubblePosition || "br").includes("l");
+        prow.className = "panel-row" + (isLeft ? " rev" : "");
+
+        const panel = document.createElement("div");
+        panel.className = "panel";
+        const img = state.panelImages[index];
+        panel.innerHTML = img
+          ? `<img src="${dataUrlOf(img)}">`
+          : `<div class="ph">画像生成に失敗しました</div>`;
+        if(p.narration){
+          const nar = document.createElement("div");
+          nar.className = "narration";
+          nar.textContent = p.narration;
+          panel.appendChild(nar);
+        }
+        prow.appendChild(panel);
+
+        if(p.dialogue){
+          const bub = document.createElement("div");
+          bub.className = "speech-bubble";
+          bub.textContent = p.dialogue;
+          prow.appendChild(bub);
+        }
+
+        outer.appendChild(prow);
+        const cap = document.createElement("div");
+        cap.className = "panel-caption";
+        cap.textContent = `#${index+1} ${p.characterName || ""}`;
+        outer.appendChild(cap);
+        page.appendChild(outer);
+      });
     });
   }
 
-  /* ---------- 画像として保存（2列グリッドで1ページに収める） ---------- */
+  /* ---------- 画像として保存（強弱つきコマ割り＋楕円吹き出し・縦書き） ---------- */
   function drawCoverImage(ctx, im, dx, dy, dw, dh){
     const ir = im.width / im.height;
     const dr = dw / dh;
@@ -660,38 +703,57 @@ ${profile}
     ctx.drawImage(im, sx, sy, sw, sh, dx, dy, dw, dh);
   }
 
-  function drawOverlays(ctx, p, dx, dy, dw, dh){
-    if(p.narration){
-      ctx.font = "12px sans-serif";
-      const nw = Math.min(ctx.measureText(p.narration).width + 16, dw*0.85);
-      ctx.fillStyle = "rgba(20,16,26,0.88)";
-      ctx.fillRect(dx+6, dy+6, nw, 20);
-      ctx.fillStyle = "#f5f1fa";
-      ctx.fillText(p.narration, dx+12, dy+20);
+  // セリフを縦書きで描画（右→左に列を送る、列内は上→下）
+  function drawVerticalText(ctx, text, x, y, w, h){
+    if(!text) return;
+    const fontSize = 13;
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.fillStyle = "#111";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const lineHeight = fontSize + 4;
+    const colWidth = fontSize + 4;
+    const maxCharsPerCol = Math.max(1, Math.floor(h / lineHeight));
+    const cols = [];
+    for(let i=0;i<text.length;i+=maxCharsPerCol){
+      cols.push(text.slice(i, i+maxCharsPerCol));
     }
-    if(p.dialogue){
-      ctx.font = "bold 12px sans-serif";
-      const bw = Math.min(ctx.measureText(p.dialogue).width + 18, dw*0.75);
-      const bh = 26;
-      let bx = dx+6, by = dy+6;
-      const pos = p.bubblePosition || "br";
-      if(pos.includes("r")) bx = dx+dw-bw-6;
-      if(pos.includes("b")) by = dy+dh-bh-6;
-      ctx.fillStyle = "#fff";
-      roundRect(ctx, bx, by, bw, bh, 10);
-      ctx.fill();
-      ctx.fillStyle = "#111";
-      ctx.fillText(p.dialogue, bx+10, by+bh/2+4);
-    }
+    let colX = x + w - colWidth/2;
+    cols.forEach(col=>{
+      const colHeight = col.length * lineHeight;
+      let charY = y + (h-colHeight)/2 + lineHeight/2;
+      for(const ch of col){
+        ctx.fillText(ch, colX, charY);
+        charY += lineHeight;
+      }
+      colX -= colWidth;
+    });
+  }
+
+  // 楕円の吹き出し＋縦書きセリフ
+  function drawSpeechBubble(ctx, x, y, w, h, text){
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,.3)";
+    ctx.beginPath();
+    ctx.ellipse(x+w/2+1, y+h/2+2, w/2, h/2, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2);
+    ctx.clip();
+    drawVerticalText(ctx, text, x+w*0.1, y+h*0.08, w*0.8, h*0.84);
+    ctx.restore();
   }
 
   document.getElementById("downloadBtn").onclick = async () => {
     const panels = state.scenario.panels;
-    const COLS = 2;
     const W = 720;
     const GAP = 12;
     const PAD = 14;
-    const colW = (W - PAD*2 - GAP*(COLS-1)) / COLS;
+    const innerW = W - PAD*2;
 
     const loaded = await Promise.all(state.panelImages.map(img=>{
       return new Promise(resolve=>{
@@ -703,23 +765,31 @@ ${profile}
       });
     }));
 
-    // 2枚ずつ1行のグリッドに並べる（余った1枚は最終行で全幅表示）
-    const rows = [];
-    for(let i=0;i<panels.length;i+=COLS) rows.push([i, Math.min(i+COLS, panels.length)-1].filter(v=>v<panels.length));
-
-    const rowHeights = rows.map(idxs=>{
-      if(idxs.length===2){
-        const [i1,i2] = idxs;
-        const h1 = loaded[i1] ? colW*(loaded[i1].height/loaded[i1].width) : colW*0.75;
-        const h2 = loaded[i2] ? colW*(loaded[i2].height/loaded[i2].width) : colW*0.75;
-        return Math.min(h1, h2);
-      }
-      const w = W - PAD*2;
-      const im = loaded[idxs[0]];
-      return im ? w*(im.height/im.width) : w*0.6;
+    // 画面表示と同じ「強弱つき」レイアウトをここでも計算する
+    const rows = computeLayout(panels);
+    let y = 60;
+    const layoutRows = rows.map(row=>{
+      const availW = innerW - GAP*(row.length-1);
+      let x = PAD;
+      const cells = row.map(cell=>{
+        const p = panels[cell.index];
+        const im = loaded[cell.index];
+        const cellW = availW * (cell.span/12);
+        const hasBubble = !!p.dialogue;
+        const bubbleW = hasBubble ? Math.min(56, cellW*0.32) : 0;
+        const imgW = cellW - bubbleW - (hasBubble ? 8 : 0);
+        const aspectFactor = cell.span===12 ? 0.5 : 1.333;
+        const imgH = imgW * aspectFactor;
+        const c = {...cell, p, im, cellW, bubbleW, imgW, imgH, x};
+        x += cellW + GAP;
+        return c;
+      });
+      const rowH = Math.max(...cells.map(c=>c.imgH));
+      const rowInfo = {cells, y, rowH};
+      y += rowH + GAP;
+      return rowInfo;
     });
-
-    const totalH = 60 + rowHeights.reduce((a,b)=>a+b+GAP,0) + PAD;
+    const totalH = y + PAD - GAP;
 
     const canvas = document.createElement("canvas");
     canvas.width = W; canvas.height = totalH;
@@ -731,41 +801,36 @@ ${profile}
     ctx.font = "bold 24px sans-serif";
     ctx.fillText(state.scenario.title || "", PAD, 40);
 
-    let y = 60;
-    rows.forEach((idxs, r)=>{
-      const rowH = rowHeights[r];
-      if(idxs.length===2){
-        const [i1,i2] = idxs;
-        const cells = [ [i1, PAD], [i2, PAD+colW+GAP] ];
-        cells.forEach(([i, x])=>{
-          const p = panels[i];
-          const im = loaded[i];
-          ctx.fillStyle = "#000";
-          ctx.fillRect(x, y, colW, rowH);
-          if(im){ drawCoverImage(ctx, im, x, y, colW, rowH); }
-          else{
-            ctx.fillStyle = "#a89bb8";
-            ctx.font = "13px sans-serif";
-            ctx.fillText("画像なし", x+10, y+rowH/2);
-          }
-          drawOverlays(ctx, p, x, y, colW, rowH);
-        });
-      }else{
-        const i = idxs[0];
-        const p = panels[i];
-        const im = loaded[i];
-        const w = W - PAD*2;
+    layoutRows.forEach(({cells, y, rowH})=>{
+      cells.forEach(c=>{
+        const isLeft = (c.p.bubblePosition || "br").includes("l");
+        let imgX, bubbleX;
+        if(c.bubbleW > 0){
+          if(isLeft){ bubbleX = c.x; imgX = c.x + c.bubbleW + 8; }
+          else{ imgX = c.x; bubbleX = c.x + c.imgW + 8; }
+        }else{
+          imgX = c.x;
+        }
         ctx.fillStyle = "#000";
-        ctx.fillRect(PAD, y, w, rowH);
-        if(im){ ctx.drawImage(im, PAD, y, w, rowH); }
+        ctx.fillRect(imgX, y, c.imgW, rowH);
+        if(c.im){ drawCoverImage(ctx, c.im, imgX, y, c.imgW, rowH); }
         else{
           ctx.fillStyle = "#a89bb8";
           ctx.font = "13px sans-serif";
-          ctx.fillText("画像なし", PAD+10, y+rowH/2);
+          ctx.fillText("画像なし", imgX+10, y+rowH/2);
         }
-        drawOverlays(ctx, p, PAD, y, w, rowH);
-      }
-      y += rowH + GAP;
+        if(c.p.narration){
+          ctx.font = "12px sans-serif";
+          const nw = Math.min(ctx.measureText(c.p.narration).width + 16, c.imgW*0.85);
+          ctx.fillStyle = "rgba(20,16,26,0.88)";
+          ctx.fillRect(imgX+6, y+6, nw, 20);
+          ctx.fillStyle = "#f5f1fa";
+          ctx.fillText(c.p.narration, imgX+12, y+20);
+        }
+        if(c.bubbleW > 0){
+          drawSpeechBubble(ctx, bubbleX, y, c.bubbleW, rowH, c.p.dialogue);
+        }
+      });
     });
 
     const link = document.createElement("a");
@@ -773,16 +838,6 @@ ${profile}
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
-
-  function roundRect(ctx,x,y,w,h,r){
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);
-    ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);
-    ctx.arcTo(x,y,x+w,y,r);
-    ctx.closePath();
-  }
 
   renderStepper();
 })();

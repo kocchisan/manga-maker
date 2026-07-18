@@ -150,12 +150,15 @@
 
   #mangaPage{
     background:#0e0b13;border-radius:14px;padding:10px;border:1px solid var(--line);
+    display:grid;grid-template-columns:repeat(2,1fr);gap:10px;
   }
+  .panel-wrap{display:flex;flex-direction:column;}
+  .panel-wrap:last-child:nth-child(odd){grid-column:1 / -1;}
   .panel{
-    position:relative;border-radius:10px;overflow:hidden;margin-bottom:10px;
-    background:#000;border:2px solid #1a1420;
+    position:relative;border-radius:10px;overflow:hidden;flex:1;
+    background:#000;border:2px solid #1a1420;min-height:110px;
   }
-  .panel img{width:100%;display:block;}
+  .panel img{width:100%;height:100%;object-fit:cover;display:block;}
   .panel .ph{
     width:100%;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;
     color:var(--sub);font-size:13px;background:
@@ -618,6 +621,8 @@ ${profile}
     const page = document.getElementById("mangaPage");
     page.innerHTML = "";
     state.scenario.panels.forEach((p, i)=>{
+      const wrap = document.createElement("div");
+      wrap.className = "panel-wrap";
       const panel = document.createElement("div");
       panel.className = "panel";
       const img = state.panelImages[i];
@@ -636,21 +641,58 @@ ${profile}
         bub.textContent = p.dialogue;
         panel.appendChild(bub);
       }
-      page.appendChild(panel);
+      wrap.appendChild(panel);
       const cap = document.createElement("div");
       cap.className = "panel-caption";
       cap.textContent = `#${i+1} ${p.characterName || ""}`;
-      page.appendChild(cap);
+      wrap.appendChild(cap);
+      page.appendChild(wrap);
     });
   }
 
-  /* ---------- 画像として保存 ---------- */
+  /* ---------- 画像として保存（2列グリッドで1ページに収める） ---------- */
+  function drawCoverImage(ctx, im, dx, dy, dw, dh){
+    const ir = im.width / im.height;
+    const dr = dw / dh;
+    let sx, sy, sw, sh;
+    if(ir > dr){ sh = im.height; sw = sh*dr; sx = (im.width-sw)/2; sy = 0; }
+    else{ sw = im.width; sh = sw/dr; sx = 0; sy = (im.height-sh)/2; }
+    ctx.drawImage(im, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
+
+  function drawOverlays(ctx, p, dx, dy, dw, dh){
+    if(p.narration){
+      ctx.font = "12px sans-serif";
+      const nw = Math.min(ctx.measureText(p.narration).width + 16, dw*0.85);
+      ctx.fillStyle = "rgba(20,16,26,0.88)";
+      ctx.fillRect(dx+6, dy+6, nw, 20);
+      ctx.fillStyle = "#f5f1fa";
+      ctx.fillText(p.narration, dx+12, dy+20);
+    }
+    if(p.dialogue){
+      ctx.font = "bold 12px sans-serif";
+      const bw = Math.min(ctx.measureText(p.dialogue).width + 18, dw*0.75);
+      const bh = 26;
+      let bx = dx+6, by = dy+6;
+      const pos = p.bubblePosition || "br";
+      if(pos.includes("r")) bx = dx+dw-bw-6;
+      if(pos.includes("b")) by = dy+dh-bh-6;
+      ctx.fillStyle = "#fff";
+      roundRect(ctx, bx, by, bw, bh, 10);
+      ctx.fill();
+      ctx.fillStyle = "#111";
+      ctx.fillText(p.dialogue, bx+10, by+bh/2+4);
+    }
+  }
+
   document.getElementById("downloadBtn").onclick = async () => {
     const panels = state.scenario.panels;
+    const COLS = 2;
     const W = 720;
-    const GAP = 14;
+    const GAP = 12;
     const PAD = 14;
-    // 事前に各画像をロードしてサイズ確定
+    const colW = (W - PAD*2 - GAP*(COLS-1)) / COLS;
+
     const loaded = await Promise.all(state.panelImages.map(img=>{
       return new Promise(resolve=>{
         if(!img){ resolve(null); return; }
@@ -660,9 +702,24 @@ ${profile}
         im.src = dataUrlOf(img);
       });
     }));
-    const innerW = W - PAD*2;
-    const heights = loaded.map(im => im ? Math.round(innerW * (im.height/im.width)) : Math.round(innerW*0.75));
-    const totalH = PAD*2 + heights.reduce((a,b)=>a+b+GAP,0) + 60;
+
+    // 2枚ずつ1行のグリッドに並べる（余った1枚は最終行で全幅表示）
+    const rows = [];
+    for(let i=0;i<panels.length;i+=COLS) rows.push([i, Math.min(i+COLS, panels.length)-1].filter(v=>v<panels.length));
+
+    const rowHeights = rows.map(idxs=>{
+      if(idxs.length===2){
+        const [i1,i2] = idxs;
+        const h1 = loaded[i1] ? colW*(loaded[i1].height/loaded[i1].width) : colW*0.75;
+        const h2 = loaded[i2] ? colW*(loaded[i2].height/loaded[i2].width) : colW*0.75;
+        return Math.min(h1, h2);
+      }
+      const w = W - PAD*2;
+      const im = loaded[idxs[0]];
+      return im ? w*(im.height/im.width) : w*0.6;
+    });
+
+    const totalH = 60 + rowHeights.reduce((a,b)=>a+b+GAP,0) + PAD;
 
     const canvas = document.createElement("canvas");
     canvas.width = W; canvas.height = totalH;
@@ -675,44 +732,41 @@ ${profile}
     ctx.fillText(state.scenario.title || "", PAD, 40);
 
     let y = 60;
-    for(let i=0;i<panels.length;i++){
-      const p = panels[i];
-      const im = loaded[i];
-      const h = heights[i];
-      ctx.fillStyle = "#000";
-      ctx.fillRect(PAD, y, innerW, h);
-      if(im){ ctx.drawImage(im, PAD, y, innerW, h); }
-      else{
-        ctx.fillStyle = "#a89bb8";
-        ctx.font = "14px sans-serif";
-        ctx.fillText("画像なし", PAD+10, y+h/2);
+    rows.forEach((idxs, r)=>{
+      const rowH = rowHeights[r];
+      if(idxs.length===2){
+        const [i1,i2] = idxs;
+        const cells = [ [i1, PAD], [i2, PAD+colW+GAP] ];
+        cells.forEach(([i, x])=>{
+          const p = panels[i];
+          const im = loaded[i];
+          ctx.fillStyle = "#000";
+          ctx.fillRect(x, y, colW, rowH);
+          if(im){ drawCoverImage(ctx, im, x, y, colW, rowH); }
+          else{
+            ctx.fillStyle = "#a89bb8";
+            ctx.font = "13px sans-serif";
+            ctx.fillText("画像なし", x+10, y+rowH/2);
+          }
+          drawOverlays(ctx, p, x, y, colW, rowH);
+        });
+      }else{
+        const i = idxs[0];
+        const p = panels[i];
+        const im = loaded[i];
+        const w = W - PAD*2;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(PAD, y, w, rowH);
+        if(im){ ctx.drawImage(im, PAD, y, w, rowH); }
+        else{
+          ctx.fillStyle = "#a89bb8";
+          ctx.font = "13px sans-serif";
+          ctx.fillText("画像なし", PAD+10, y+rowH/2);
+        }
+        drawOverlays(ctx, p, PAD, y, w, rowH);
       }
-      // ナレーション
-      if(p.narration){
-        ctx.font = "12px sans-serif";
-        const nw = Math.min(ctx.measureText(p.narration).width + 20, innerW*0.7);
-        ctx.fillStyle = "rgba(20,16,26,0.88)";
-        ctx.fillRect(PAD+8, y+8, nw, 22);
-        ctx.fillStyle = "#f5f1fa";
-        ctx.fillText(p.narration, PAD+16, y+24);
-      }
-      // 吹き出し
-      if(p.dialogue){
-        ctx.font = "bold 13px sans-serif";
-        const bw = Math.min(ctx.measureText(p.dialogue).width + 24, innerW*0.62);
-        const bh = 30;
-        let bx = PAD+8, by = y+8;
-        const pos = p.bubblePosition || "br";
-        if(pos.includes("r")) bx = PAD+innerW-bw-8;
-        if(pos.includes("b")) by = y+h-bh-8;
-        ctx.fillStyle = "#fff";
-        roundRect(ctx, bx, by, bw, bh, 12);
-        ctx.fill();
-        ctx.fillStyle = "#111";
-        ctx.fillText(p.dialogue, bx+12, by+bh/2+5);
-      }
-      y += h + GAP;
-    }
+      y += rowH + GAP;
+    });
 
     const link = document.createElement("a");
     link.download = "manga.png";

@@ -165,11 +165,11 @@
       repeating-linear-gradient(45deg,#1a1420,#1a1420 10px,#20182a 10px,#20182a 20px);
   }
   .speech-bubble{
-    position:absolute;max-width:46%;max-height:112px;min-width:56px;
+    position:absolute;max-width:58%;max-height:82%;min-width:56px;min-height:56px;
     background:#fff;color:#111;border-radius:50%/44%;
-    padding:11px 9px;display:flex;align-items:center;justify-content:center;
+    padding:12px 10px;display:flex;align-items:center;justify-content:center;
     writing-mode:vertical-rl;text-orientation:mixed;
-    font-size:12.5px;font-weight:700;line-height:1.5;letter-spacing:.02em;
+    font-size:12.5px;font-weight:700;line-height:1.45;letter-spacing:.02em;
     box-shadow:0 2px 6px rgba(0,0,0,.35);overflow:hidden;
   }
   .speech-bubble.tl{top:8px;left:8px;}
@@ -644,6 +644,19 @@ ${profile}
   const FULL_MAX_RATIO = 0.62; // 全幅コマの高さ上限（幅に対する比率）
   const HALF_MAX_RATIO = 1.05; // ペアコマの高さ上限
 
+  // 吹き出しの枠からセリフがはみ出す場合、収まるまで少しずつ文字を縮小する
+  function fitBubbleText(bub){
+    if(!bub) return;
+    let size = 12.5;
+    bub.style.fontSize = size + "px";
+    let guard = 0;
+    while((bub.scrollHeight > bub.clientHeight + 1 || bub.scrollWidth > bub.clientWidth + 1) && size > 7.5 && guard < 20){
+      size -= 0.5;
+      bub.style.fontSize = size + "px";
+      guard++;
+    }
+  }
+
   function renderMangaPage(){
     document.getElementById("mangaTitle").textContent = state.scenario.title || "";
     const page = document.getElementById("mangaPage");
@@ -660,6 +673,12 @@ ${profile}
         const panel = document.createElement("div");
         panel.className = "panel";
         const img = state.panelImages[index];
+        let bub = null;
+        if(p.dialogue){
+          bub = document.createElement("div");
+          bub.className = "speech-bubble " + (p.bubblePosition || "br");
+          bub.textContent = p.dialogue;
+        }
         if(img){
           const imgEl = document.createElement("img");
           imgEl.src = dataUrlOf(img);
@@ -667,18 +686,14 @@ ${profile}
             const naturalRatio = imgEl.naturalHeight / imgEl.naturalWidth;
             const maxRatio = span === 12 ? FULL_MAX_RATIO : HALF_MAX_RATIO;
             panel.style.aspectRatio = `1 / ${Math.min(naturalRatio, maxRatio)}`;
+            requestAnimationFrame(() => fitBubbleText(bub));
           };
           panel.appendChild(imgEl);
         }else{
           panel.innerHTML = `<div class="ph">画像生成に失敗しました</div>`;
+          requestAnimationFrame(() => fitBubbleText(bub));
         }
-
-        if(p.dialogue){
-          const bub = document.createElement("div");
-          bub.className = "speech-bubble " + (p.bubblePosition || "br");
-          bub.textContent = p.dialogue;
-          panel.appendChild(bub);
-        }
+        if(bub) panel.appendChild(bub);
 
         outer.appendChild(panel);
         const cap = document.createElement("div");
@@ -691,31 +706,35 @@ ${profile}
   }
 
   /* ---------- 画像として保存（強弱つきコマ割り＋楕円吹き出し・縦書き、画像は切り取らない） ---------- */
-  // 吹き出しの寸法をセリフの文字数から見積もる（枠内に収める）
+  // 吹き出しの寸法をセリフの文字数から見積もる。枠に収まらない場合は文字を縮小してでも全文を収める。
   function bubbleBoxSize(text, maxW, maxH){
-    const fontSize = 13, lineHeight = fontSize+4, colWidth = fontSize+4;
-    const padX = 20, padY = 20;
     const len = Math.max(1, text.length);
-    // 縦長になりすぎないよう、文字数から縦横バランスの取れた列数を決める
-    let rowsPerCol = Math.max(1, Math.round(Math.sqrt(len * 1.15)));
-    let cols = Math.ceil(len / rowsPerCol);
-    let w = cols*colWidth + padX;
-    let h = rowsPerCol*lineHeight + padY;
-    while(h > maxH && rowsPerCol > 1){
-      rowsPerCol--;
-      cols = Math.ceil(len / rowsPerCol);
-      w = cols*colWidth + padX;
-      h = rowsPerCol*lineHeight + padY;
+    const padX = 20, padY = 20;
+    let fontSize = 13;
+    while(fontSize >= 8){
+      const lineHeight = fontSize+4, colWidth = fontSize+4;
+      const maxRowsAllowed = Math.max(1, Math.floor((maxH-padY)/lineHeight));
+      const maxColsAllowed = Math.max(1, Math.floor((maxW-padX)/colWidth));
+      const fits = maxRowsAllowed*maxColsAllowed >= len;
+      if(fits || fontSize === 8){
+        let rowsPerCol = Math.max(1, Math.min(maxRowsAllowed, Math.round(Math.sqrt(len*1.15))));
+        let cols = Math.min(maxColsAllowed, Math.ceil(len/rowsPerCol));
+        while(cols*rowsPerCol < len && rowsPerCol < maxRowsAllowed){
+          rowsPerCol++;
+          cols = Math.min(maxColsAllowed, Math.ceil(len/rowsPerCol));
+        }
+        const w = Math.min(maxW, cols*colWidth + padX);
+        const h = Math.min(maxH, rowsPerCol*lineHeight + padY);
+        return {w: Math.max(w, colWidth+padX), h: Math.max(h, lineHeight+padY), fontSize};
+      }
+      fontSize -= 1;
     }
-    w = Math.min(w, maxW);
-    h = Math.min(h, maxH);
-    return {w: Math.max(w, colWidth+padX), h: Math.max(h, lineHeight+padY)};
   }
 
   // セリフを縦書きで描画（右→左に列を送る、列内は上→下）
-  function drawVerticalText(ctx, text, x, y, w, h){
+  function drawVerticalText(ctx, text, x, y, w, h, fontSize){
     if(!text) return;
-    const fontSize = 13;
+    fontSize = fontSize || 13;
     ctx.font = `bold ${fontSize}px sans-serif`;
     ctx.fillStyle = "#111";
     ctx.textAlign = "center";
@@ -740,7 +759,7 @@ ${profile}
   }
 
   // 楕円の吹き出し＋縦書きセリフ
-  function drawSpeechBubble(ctx, x, y, w, h, text){
+  function drawSpeechBubble(ctx, x, y, w, h, text, fontSize){
     ctx.save();
     ctx.fillStyle = "rgba(0,0,0,.3)";
     ctx.beginPath();
@@ -753,7 +772,7 @@ ${profile}
     ctx.beginPath();
     ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2);
     ctx.clip();
-    drawVerticalText(ctx, text, x+w*0.1, y+h*0.08, w*0.8, h*0.84);
+    drawVerticalText(ctx, text, x+w*0.1, y+h*0.08, w*0.8, h*0.84, fontSize);
     ctx.restore();
   }
 
@@ -825,10 +844,10 @@ ${profile}
         }
         if(c.p.dialogue){
           const pos = c.p.bubblePosition || "br";
-          const {w:bw, h:bh} = bubbleBoxSize(c.p.dialogue, c.cellW*0.44, 112);
+          const {w:bw, h:bh, fontSize} = bubbleBoxSize(c.p.dialogue, c.cellW*0.58, c.cellH*0.82);
           const bx = pos.includes("l") ? c.x+8 : c.x+c.cellW-bw-8;
           const by = pos.includes("t") ? y+8 : y+c.cellH-bh-8;
-          drawSpeechBubble(ctx, bx, by, bw, bh, c.p.dialogue);
+          drawSpeechBubble(ctx, bx, by, bw, bh, c.p.dialogue, fontSize);
         }
       });
     });

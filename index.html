@@ -422,7 +422,7 @@
         <div class="actions">
           <button class="btn ghost btn-photo" style="flex:1;">📷 写真を選ぶ</button>
           <button class="btn primary btn-convert" style="flex:1;" ${ch.photo?"":"disabled"}>🎨 キャラ変換</button>
-          <button class="btn danger btn-remove" style="flex:0 0 auto;padding:8px 12px;">✕</button>
+          <button class="btn danger btn-remove" style="flex:0 0 auto;width:auto;padding:8px 12px;">✕</button>
         </div>
         <div class="status ${ch.status.startsWith('❌')?'err':(ch.mangaAvatar?'ok':'')}">${ch.status}</div>
       `;

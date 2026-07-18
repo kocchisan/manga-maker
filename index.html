@@ -153,33 +153,28 @@
     display:grid;grid-template-columns:repeat(12,1fr);gap:10px;
   }
   .panel-outer{display:flex;flex-direction:column;min-width:0;}
-  .panel-row{display:flex;gap:8px;}
-  .panel-row.rev{flex-direction:row-reverse;}
   .panel{
-    position:relative;border-radius:10px;overflow:hidden;flex:1 1 auto;min-width:0;
+    position:relative;border-radius:10px;overflow:hidden;min-width:0;
     background:#000;border:2px solid #1a1420;
   }
-  .panel-outer.full .panel{aspect-ratio:16/8;}
-  .panel-outer.half .panel{aspect-ratio:3/4;}
-  .panel img{width:100%;height:100%;object-fit:cover;display:block;}
+  .panel img{width:100%;display:block;}
   .panel .ph{
-    width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+    width:100%;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;
     color:var(--sub);font-size:13px;background:
       repeating-linear-gradient(45deg,#1a1420,#1a1420 10px,#20182a 10px,#20182a 20px);
   }
   .speech-bubble{
-    flex:0 0 auto;width:56px;max-width:32%;
-    background:#fff;color:#111;border-radius:50%/42%;
-    padding:12px 8px;display:flex;align-items:center;justify-content:center;
+    position:absolute;max-width:52%;max-height:80%;
+    background:#fff;color:#111;border-radius:50%/38%;
+    padding:12px 9px;display:flex;align-items:center;justify-content:center;
     writing-mode:vertical-rl;text-orientation:mixed;
     font-size:12.5px;font-weight:700;line-height:1.55;letter-spacing:.02em;
-    box-shadow:0 2px 6px rgba(0,0,0,.35);position:relative;overflow:hidden;
+    box-shadow:0 2px 6px rgba(0,0,0,.35);overflow:hidden;
   }
-  .narration{
-    background:rgba(20,16,26,.88);color:#f5f1fa;font-size:11.5px;
-    padding:5px 10px;position:absolute;top:8px;left:8px;border-left:3px solid var(--accent2);
-    max-width:70%;line-height:1.4;
-  }
+  .speech-bubble.tl{top:8px;left:8px;}
+  .speech-bubble.tr{top:8px;right:8px;}
+  .speech-bubble.bl{bottom:8px;left:8px;}
+  .speech-bubble.br{bottom:8px;right:8px;}
   .panel-caption{font-size:11px;color:var(--sub);text-align:center;padding-top:4px;}
 
   footer.note{font-size:11px;color:var(--sub);text-align:center;margin-top:20px;line-height:1.7;}
@@ -543,7 +538,6 @@
                 characterName:{type:"string"},
                 sceneDescription:{type:"string"},
                 dialogue:{type:"string"},
-                narration:{type:"string"},
                 bubblePosition:{type:"string", enum:["tl","tr","bl","br"]}
               },
               required:["characterName","sceneDescription","dialogue","bubblePosition"]
@@ -564,9 +558,8 @@ ${profile}
 - ちょうど${state.panelCount}コマ分の配列を panels に入れる
 - 各コマに、登場人物のうち誰がメインで映るか(characterName、登場人物の名前と完全一致させる)
 - sceneDescription には、そのコマで描くべき情景・構図・表情・動作を、絵師に伝える指示として具体的に書く（日本語）
-- dialogue には、そのコマでのセリフを1〜2文で書く（ナレーションのみのコマは空文字でよい）
-- narration には状況説明のナレーションがあれば短く書く（不要なら空文字）
-- bubblePosition は tl/tr/bl/br のいずれかで、セリフ吹き出しを置く位置をコマごとにバランスよく散らす
+- dialogue には、そのコマでのセリフを1〜2文で書く（すべてのコマにセリフを入れ、ナレーションや状況説明の文章は入れない）
+- bubblePosition は tl/tr/bl/br のいずれかで、セリフ吹き出しを置く位置をコマごとにバランスよく散らす（キャラクターの顔にかぶらない位置を選ぶ）
 - 起承転結を意識し、最後のコマは温かい締めくくりにする`;
       const scenario = await callGeminiText(prompt, schema);
       state.scenario = scenario;
@@ -620,7 +613,7 @@ ${profile}
      先頭（つかみ）と最後（締め）のコマも全幅で強調する。 */
   function computeLayout(panels){
     const scores = panels.map(p =>
-      (p.sceneDescription||"").length + (p.dialogue||"").length*1.5 + (p.narration||"").length);
+      (p.sceneDescription||"").length + (p.dialogue||"").length*1.5);
     const avg = scores.reduce((a,b)=>a+b,0) / (scores.length || 1);
     const isBig = scores.map((s,i)=> i===0 || i===panels.length-1 || s >= avg*1.25);
     const rows = [];
@@ -652,15 +645,11 @@ ${profile}
     const panels = state.scenario.panels;
     const rows = computeLayout(panels);
     rows.forEach(row=>{
-      row.forEach(({index, span}, cellPos)=>{
+      row.forEach(({index, span})=>{
         const p = panels[index];
         const outer = document.createElement("div");
-        outer.className = "panel-outer " + (span===12 ? "full" : "half");
+        outer.className = "panel-outer";
         outer.style.gridColumn = `span ${span}`;
-
-        const prow = document.createElement("div");
-        const isLeft = (p.bubblePosition || "br").includes("l");
-        prow.className = "panel-row" + (isLeft ? " rev" : "");
 
         const panel = document.createElement("div");
         panel.className = "panel";
@@ -668,22 +657,15 @@ ${profile}
         panel.innerHTML = img
           ? `<img src="${dataUrlOf(img)}">`
           : `<div class="ph">画像生成に失敗しました</div>`;
-        if(p.narration){
-          const nar = document.createElement("div");
-          nar.className = "narration";
-          nar.textContent = p.narration;
-          panel.appendChild(nar);
-        }
-        prow.appendChild(panel);
 
         if(p.dialogue){
           const bub = document.createElement("div");
-          bub.className = "speech-bubble";
+          bub.className = "speech-bubble " + (p.bubblePosition || "br");
           bub.textContent = p.dialogue;
-          prow.appendChild(bub);
+          panel.appendChild(bub);
         }
 
-        outer.appendChild(prow);
+        outer.appendChild(panel);
         const cap = document.createElement("div");
         cap.className = "panel-caption";
         cap.textContent = `#${index+1} ${p.characterName || ""}`;
@@ -693,14 +675,19 @@ ${profile}
     });
   }
 
-  /* ---------- 画像として保存（強弱つきコマ割り＋楕円吹き出し・縦書き） ---------- */
-  function drawCoverImage(ctx, im, dx, dy, dw, dh){
-    const ir = im.width / im.height;
-    const dr = dw / dh;
-    let sx, sy, sw, sh;
-    if(ir > dr){ sh = im.height; sw = sh*dr; sx = (im.width-sw)/2; sy = 0; }
-    else{ sw = im.width; sh = sw/dr; sx = 0; sy = (im.height-sh)/2; }
-    ctx.drawImage(im, sx, sy, sw, sh, dx, dy, dw, dh);
+  /* ---------- 画像として保存（強弱つきコマ割り＋楕円吹き出し・縦書き、画像は切り取らない） ---------- */
+  // 吹き出しの寸法をセリフの文字数から見積もる（枠内に収める）
+  function bubbleBoxSize(text, maxW, maxH){
+    const fontSize = 13, lineHeight = fontSize+4, colWidth = fontSize+4;
+    const padX = 18, padY = 18;
+    const availH = Math.max(lineHeight, maxH - padY);
+    const maxCharsPerCol = Math.max(1, Math.floor(availH/lineHeight));
+    const len = Math.max(1, text.length);
+    const cols = Math.max(1, Math.ceil(len/maxCharsPerCol));
+    const w = Math.min(maxW, cols*colWidth + padX);
+    const charsInCol = Math.min(maxCharsPerCol, len);
+    const h = Math.min(maxH, charsInCol*lineHeight + padY);
+    return {w: Math.max(w, colWidth+padX), h: Math.max(h, lineHeight+padY)};
   }
 
   // セリフを縦書きで描画（右→左に列を送る、列内は上→下）
@@ -765,7 +752,7 @@ ${profile}
       });
     }));
 
-    // 画面表示と同じ「強弱つき」レイアウトをここでも計算する
+    // 画面表示と同じ「強弱つき」レイアウトをここでも計算する（画像は切り取らず、幅基準の等比で配置）
     const rows = computeLayout(panels);
     let y = 60;
     const layoutRows = rows.map(row=>{
@@ -775,12 +762,8 @@ ${profile}
         const p = panels[cell.index];
         const im = loaded[cell.index];
         const cellW = availW * (cell.span/12);
-        const hasBubble = !!p.dialogue;
-        const bubbleW = hasBubble ? Math.min(56, cellW*0.32) : 0;
-        const imgW = cellW - bubbleW - (hasBubble ? 8 : 0);
-        const aspectFactor = cell.span===12 ? 0.5 : 1.333;
-        const imgH = imgW * aspectFactor;
-        const c = {...cell, p, im, cellW, bubbleW, imgW, imgH, x};
+        const imgH = im ? cellW * (im.height/im.width) : cellW*0.7;
+        const c = {...cell, p, im, cellW, imgH, x};
         x += cellW + GAP;
         return c;
       });
@@ -803,32 +786,20 @@ ${profile}
 
     layoutRows.forEach(({cells, y, rowH})=>{
       cells.forEach(c=>{
-        const isLeft = (c.p.bubblePosition || "br").includes("l");
-        let imgX, bubbleX;
-        if(c.bubbleW > 0){
-          if(isLeft){ bubbleX = c.x; imgX = c.x + c.bubbleW + 8; }
-          else{ imgX = c.x; bubbleX = c.x + c.imgW + 8; }
-        }else{
-          imgX = c.x;
-        }
         ctx.fillStyle = "#000";
-        ctx.fillRect(imgX, y, c.imgW, rowH);
-        if(c.im){ drawCoverImage(ctx, c.im, imgX, y, c.imgW, rowH); }
+        ctx.fillRect(c.x, y, c.cellW, rowH);
+        if(c.im){ ctx.drawImage(c.im, c.x, y, c.cellW, c.imgH); }
         else{
           ctx.fillStyle = "#a89bb8";
           ctx.font = "13px sans-serif";
-          ctx.fillText("画像なし", imgX+10, y+rowH/2);
+          ctx.fillText("画像なし", c.x+10, y+rowH/2);
         }
-        if(c.p.narration){
-          ctx.font = "12px sans-serif";
-          const nw = Math.min(ctx.measureText(c.p.narration).width + 16, c.imgW*0.85);
-          ctx.fillStyle = "rgba(20,16,26,0.88)";
-          ctx.fillRect(imgX+6, y+6, nw, 20);
-          ctx.fillStyle = "#f5f1fa";
-          ctx.fillText(c.p.narration, imgX+12, y+20);
-        }
-        if(c.bubbleW > 0){
-          drawSpeechBubble(ctx, bubbleX, y, c.bubbleW, rowH, c.p.dialogue);
+        if(c.p.dialogue){
+          const pos = c.p.bubblePosition || "br";
+          const {w:bw, h:bh} = bubbleBoxSize(c.p.dialogue, c.cellW*0.52, c.imgH*0.8);
+          const bx = pos.includes("l") ? c.x+8 : c.x+c.cellW-bw-8;
+          const by = pos.includes("t") ? y+8 : y+c.imgH-bh-8;
+          drawSpeechBubble(ctx, bx, by, bw, bh, c.p.dialogue);
         }
       });
     });
